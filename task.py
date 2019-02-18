@@ -15,6 +15,7 @@ parser.add_argument('-d', '--due', type=str, help='Due day')
 args = parser.parse_args()
 
 path = config["DEFAULT"]["path"] + ".tasks"
+rollover = config["DEFAULT"]["rollover"]
 
 days_of_week = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
@@ -55,7 +56,7 @@ def read_tasks(path):
 def print_tasks(df):
     print(df)
 
-def tasks_to_dataframe(task_list):
+def tasks_to_dataframe(task_list, by_day=True):
     task = []
     created = []
     due = []
@@ -72,7 +73,8 @@ def tasks_to_dataframe(task_list):
 
     df = pd.concat([t, c, d], axis=1)
     df = df.sort_values(by=["due"]).reset_index()# sort by due date
-    df.update(series_to_day(df["due"]))
+    if by_day:
+        df.update(series_to_day(df["due"]))
 
     return df[["task", "due"]]
 
@@ -98,10 +100,7 @@ def day_from_datetime(key):
     today = datetime.datetime.now()
     delta = (key.date()-today.date()).days
 
-
-
     if delta == 0:
-
         return "Today"
 
     if delta < 7:
@@ -121,10 +120,50 @@ def series_to_day(series):
 
     return pd.Series(new_series, name=series.name)
 
+def move_tasks_due(task_list, var, due=None, key="past"):
+
+    today = datetime.datetime.today()
+    new_task_list = []
+
+    if isinstance(due, datetime.datetime):
+        key = datetime_from_day(key.lower())
+        print(due)
+        for task in task_list:
+            if task.due.date() == key.date():
+                task.due = due
+            new_task_list.append(task)
+
+        with open(path, 'wb') as output:
+            pickle.dump(new_task_list, output, pickle.HIGHEST_PROTOCOL)
+    else:
+
+        if key.lower() != "past":
+            key = datetime_from_day(key.lower())
+            for task in task_list:
+                if task.due.date() == key.date():
+                    task.due = datetime_from_day(due)
+                new_task_list.append(task)
+
+        else:
+            for task in task_list:
+                if task.due.date() < today.date():
+                    task.due = today
+                new_task_list.append(task)
+
+        with open(path, 'wb') as output:
+            pickle.dump(new_task_list, output, pickle.HIGHEST_PROTOCOL)
+
+
 if __name__ == "__main__":
 
     task_list = read_tasks(path)
     tasks_df = tasks_to_dataframe(task_list)
+
+    yesterday = datetime.datetime.today() - datetime.timedelta(days=1)
+
+    if rollover:
+        move_tasks_due(task_list, "due")
+
 
     if args.task:
 
